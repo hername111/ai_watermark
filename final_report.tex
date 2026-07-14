@@ -12,6 +12,7 @@
 \usepackage{setspace}
 \usepackage{enumitem}
 \usepackage{xeCJK}
+\usepackage{indentfirst}
 
 \hypersetup{
   colorlinks=true,
@@ -25,8 +26,8 @@
 \captionsetup{font=small,labelfont=bf}
 \setstretch{1.08}
 \setlength{\parskip}{0.35em}
-\setlength{\parindent}{0pt}
-\setlist[itemize]{topsep=0.2em,itemsep=0.1em}
+\setlength{\parindent}{2em}
+\setlist[itemize]{topsep=0.2em,itemsep=0.1em,leftmargin=3em}
 
 \title{\textbf{Watermarking for Large Language Models and Structured Time-Series Data}}
 \author{
@@ -79,11 +80,11 @@ Most work, however, focuses on natural-language token sequences.
 There is less attention to watermarking structured outputs such as tables, time-series forecasts, and numerical records, even though foundation models are increasingly used to generate this type of data.
 
 This paper makes three contributions:
-\begin{enumerate}
+\begin{itemize}[label=\textbf{\textbullet}]
   \item We reproduce KGW and an unbiased probability-reweighting watermark on Qwen2.5-0.5B-Instruct, using a controlled Chinese prompt set and human-written negative samples.
   \item We evaluate the two text watermarks across detection accuracy, z-score behavior, ROC/AUC, false positives, generation quality, latency, parameter sensitivity, and robustness to deletion and synonym-substitution attacks.
   \item We design and test a structured residual watermark for tabular time-series data, embedding a 12-bit payload into small numerical residuals while preserving distributional statistics.
-\end{enumerate}
+\end{itemize}
 Together, these experiments connect the standard LLM watermarking literature with a structured-data setting that is relevant for future multimodal and data-generating foundation models.
 
 \section{Problem Definition}
