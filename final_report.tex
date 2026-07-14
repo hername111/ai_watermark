@@ -32,7 +32,7 @@
 \title{\textbf{Watermarking for Large Language Models and Structured Time-Series Data}}
 \author{
 Final Group Project Report\\[0.5em]
-\textbf{Team Members:} 郑胜文, 胡辉宇\\
+\textbf{Team Members:} Shengwen Zheng, Huiyu Hu\\
 \textbf{Course:} Artificial Intelligence
 }
 \date{Due Date: 30 June 2026}
@@ -55,6 +55,21 @@ The structured residual watermark achieves perfect bit recovery under additive n
 Large language models can generate fluent text at low cost, which creates both useful applications and attribution risks.
 Watermarking addresses this problem by inserting a hidden statistical signal during generation and detecting the signal later without changing the visible task interface.
 A good watermark should be detectable, hard to remove, computationally lightweight, and minimally harmful to output quality.
+
+This project studies watermarking in two settings.
+First, we reproduce and evaluate two representative LLM text watermarking methods, KGW green-list watermarking and an unbiased probability-reweighting watermark, on Qwen2.5-0.5B-Instruct.
+Second, we extend the watermarking idea to structured tabular and time-series outputs by embedding payload bits into small residual perturbations.
+This second setting is important because foundation models increasingly generate forecasts, tables, trajectories, and other numerical records, not only natural-language text.
+
+This paper makes three contributions:
+\begin{itemize}[label=\textbf{\textbullet}]
+  \item We reproduce KGW and an unbiased probability-reweighting watermark on Qwen2.5-0.5B-Instruct, using a controlled Chinese prompt set and human-written negative samples.
+  \item We evaluate the two text watermarks across detection accuracy, z-score behavior, ROC/AUC, false positives, generation quality, latency, parameter sensitivity, and robustness to deletion and synonym-substitution attacks.
+  \item We design and test a structured residual watermark for tabular time-series data, embedding a 12-bit payload into small numerical residuals while preserving distributional statistics.
+\end{itemize}
+Together, these experiments connect the standard LLM watermarking literature with a structured-data setting that is relevant for future multimodal and data-generating foundation models.
+
+\section{Related Work}
 
 Existing AI-text detectors often rely on post-hoc statistical features such as perplexity, burstiness, classifier scores, or retrieval-style similarity.
 These detectors are attractive because they can be applied after a model has already been deployed, but recent studies show that they can be brittle under paraphrasing, editing, and distribution shift \cite{sadasivan2023}.
@@ -79,15 +94,9 @@ Across this literature, the central tradeoff is consistent: stronger embedding i
 Most work, however, focuses on natural-language token sequences.
 There is less attention to watermarking structured outputs such as tables, time-series forecasts, and numerical records, even though foundation models are increasingly used to generate this type of data.
 
-This paper makes three contributions:
-\begin{itemize}[label=\textbf{\textbullet}]
-  \item We reproduce KGW and an unbiased probability-reweighting watermark on Qwen2.5-0.5B-Instruct, using a controlled Chinese prompt set and human-written negative samples.
-  \item We evaluate the two text watermarks across detection accuracy, z-score behavior, ROC/AUC, false positives, generation quality, latency, parameter sensitivity, and robustness to deletion and synonym-substitution attacks.
-  \item We design and test a structured residual watermark for tabular time-series data, embedding a 12-bit payload into small numerical residuals while preserving distributional statistics.
-\end{itemize}
-Together, these experiments connect the standard LLM watermarking literature with a structured-data setting that is relevant for future multimodal and data-generating foundation models.
+\section{Watermarking Framework}
 
-\section{Problem Definition}
+\subsection{Problem Formulation}
 
 For text generation, the watermarking problem is defined over a language model distribution $p(x_t \mid x_{<t})$, following the standard decoding-time watermarking formulation used in prior LLM watermarking work \cite{kirchenbauer2023,kuditipudi2023}.
 During decoding, a secret key partitions the vocabulary into green and red tokens based on context.
@@ -98,8 +107,6 @@ A sequence is classified as watermarked when the z-score exceeds a threshold.
 For structured time-series data, the problem is to embed an identity payload into numerical outputs while preserving statistical utility.
 The detector should recover the payload after realistic transformations such as noise injection, row deletion, quantization, and smoothing.
 The main constraints are imperceptibility, payload capacity, and robustness.
-
-\section{Algorithm Design}
 
 \subsection{KGW Green-List Text Watermark}
 
@@ -124,7 +131,7 @@ Bit value 1 and bit value 0 correspond to opposite signed residual shifts.
 Detection aggregates residual signs over all records assigned to each bit and computes a bit-level z-score.
 The perturbation magnitude is only about 3\% of the data standard deviation, so the watermark remains small relative to natural variation.
 
-\section{Experiments}
+\subsection{Training and Testing Setup}
 
 The text experiments use Qwen2.5-0.5B-Instruct \cite{qwen25} with 100 Chinese prompts, maximum generation length of 80 new tokens, temperature 0.9, and top-p 0.95.
 Human-written Chinese texts are used as negative samples for false-positive evaluation.
@@ -133,6 +140,8 @@ We compare baseline generation, KGW, and unbiased watermarking across detection,
 The structured-data experiment uses 48 entities and 150 time steps, for 7200 total rows.
 The payload is 12 bits.
 We evaluate distribution preservation with summary statistics, correlations, and a Kolmogorov-Smirnov test, then test robustness under additive noise, random row dropping, smoothing, and quantization.
+
+\section{Results \& Experiments}
 
 \subsection{Text Watermark Reproduction}
 
@@ -262,23 +271,18 @@ It links the bit-detection results, quality-preservation metrics, and attack out
 \caption{Structured time-series watermark detection, quality, and attack robustness.}
 \end{figure}
 
-\section{Discussion}
+\section{Conclusion}
 
-The experiments show that no single watermark setting is optimal for every objective, matching the detection-quality-robustness tradeoff emphasized in previous watermarking studies \cite{kirchenbauer2023,kuditipudi2023,markllm2024}.
-KGW is preferable when the priority is confident detection and attack robustness.
-The unbiased method is preferable when preserving generation quality is more important and moderate detection confidence is acceptable.
+KGW achieved the strongest text watermark detection, with mean $z=5.22$ in the reproduction experiment and AUC up to 1.000 in systematic evaluation.
+The unbiased method reduced quality loss, with mean PPL close to baseline, but required stronger parameters to reach high recall.
+The proposed structured residual watermark embedded a 12-bit payload into time-series data with minimal statistical distortion and perfect recovery under several common attacks.
+These results show that no single watermark setting is optimal for every objective, matching the detection-quality-robustness tradeoff emphasized in previous watermarking studies \cite{kirchenbauer2023,kuditipudi2023,markllm2024}.
+KGW is preferable when the priority is confident detection and attack robustness, while the unbiased method is preferable when preserving generation quality is more important and moderate detection confidence is acceptable.
 For structured data, residual aggregation can produce extremely strong bit-level evidence while keeping visible statistical changes small, but smoothing attacks are a clear limitation because they specifically suppress high-frequency residual patterns.
 
 A limitation of this project is scale.
 The text experiments use a small open-source model and 100 prompts, so the results should be viewed as a controlled reproduction rather than a full deployment study.
 Future work should evaluate larger models, longer generations, paraphrase attacks, multilingual prompts, and adaptive attackers who know the detector family but not the secret key, because these factors are repeatedly identified as key deployment risks for AI-text watermarking and detection \cite{kirchenbauer_reliability2023,sadasivan2023}.
-
-\section{Conclusion}
-
-We completed a full watermarking study in the required ML-paper structure.
-KGW achieved the strongest text watermark detection, with mean $z=5.22$ in the reproduction experiment and AUC up to 1.000 in systematic evaluation.
-The unbiased method reduced quality loss, with mean PPL close to baseline, but required stronger parameters to reach high recall.
-The proposed structured residual watermark embedded a 12-bit payload into time-series data with minimal statistical distortion and perfect recovery under several common attacks.
 Overall, the project demonstrates both the promise and the tradeoffs of watermarking across text and structured-data generation.
 
 \begin{thebibliography}{99}

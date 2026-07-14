@@ -4,8 +4,8 @@
 
 队员：
 
-- 郑胜文
-- 胡辉宇
+- Shengwen Zheng
+- Huiyu Hu
 
 ## 项目内容
 
