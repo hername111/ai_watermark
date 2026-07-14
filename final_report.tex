@@ -56,10 +56,36 @@ Large language models can generate fluent text at low cost, which creates both u
 Watermarking addresses this problem by inserting a hidden statistical signal during generation and detecting the signal later without changing the visible task interface.
 A good watermark should be detectable, hard to remove, computationally lightweight, and minimally harmful to output quality.
 
-Our project has two goals.
-First, we reproduce and evaluate two text watermarking methods for LLM generation: KGW, which biases tokens from a pseudorandom green list, and an unbiased probability-reweighting method inspired by distribution-preserving watermarking.
-Second, we extend the watermarking idea to structured data by embedding payload bits into residuals of synthetic time-series outputs.
-This extension is useful because modern foundation models increasingly generate tables, trajectories, forecasts, and other numerical sequences, not only text.
+Existing AI-text detectors often rely on post-hoc statistical features such as perplexity, burstiness, classifier scores, or retrieval-style similarity.
+These detectors are attractive because they can be applied after a model has already been deployed, but recent studies show that they can be brittle under paraphrasing, editing, and distribution shift \cite{sadasivan2023}.
+Watermarking is different: it changes the generation process itself so that the generated sample carries a secret-keyed signal.
+This makes watermarking especially useful for providers who control decoding, because the detector can later test for a known statistical pattern without needing to train a separate classifier.
+
+The most influential LLM watermarking algorithm is the KGW green-list method of Kirchenbauer et al. \cite{kirchenbauer2023}.
+At each decoding step, a secret pseudorandom function partitions the vocabulary into green and red tokens, then adds a logit bias to green tokens.
+The detector recomputes the same partition and uses a z-test to decide whether green tokens appear more often than expected.
+KGW is simple, efficient, and usually produces a strong detection signal, but because it shifts the model distribution, strong watermark settings can affect text quality.
+Follow-up work analyzes reliability under realistic attacks such as human rewriting, machine paraphrasing, and document mixing \cite{kirchenbauer_reliability2023}.
+
+A second line of work studies distribution-preserving or distortion-free watermarks.
+Kuditipudi et al. propose robust distortion-free watermarking based on keyed random sequences and sampling schemes such as inverse transform sampling and exponential minimum sampling \cite{kuditipudi2023}.
+The goal is to preserve the marginal distribution of model outputs while still enabling detection by a party that knows the key.
+This family is conceptually related to unbiased probability-reweighting methods: instead of adding a large logit offset, the sampler perturbs or reorders probability mass in a more controlled way.
+Such methods usually improve imperceptibility, but the detection signal can be weaker and more sensitive to output entropy.
+
+Recent toolkits and surveys organize these algorithms into a broader engineering space.
+MarkLLM provides a unified implementation and evaluation framework for text watermarking methods \cite{markllm2024}, while the ACL watermarking tutorial summarizes design choices such as green-list construction, secret keys, detection thresholds, quality metrics, and robustness evaluation \cite{tutorial2024}.
+Across this literature, the central tradeoff is consistent: stronger embedding improves detection and robustness, while weaker or distribution-preserving embedding better protects output quality.
+Most work, however, focuses on natural-language token sequences.
+There is less attention to watermarking structured outputs such as tables, time-series forecasts, and numerical records, even though foundation models are increasingly used to generate this type of data.
+
+This paper makes three contributions:
+\begin{enumerate}
+  \item We reproduce KGW and an unbiased probability-reweighting watermark on Qwen2.5-0.5B-Instruct, using a controlled Chinese prompt set and human-written negative samples.
+  \item We evaluate the two text watermarks across detection accuracy, z-score behavior, ROC/AUC, false positives, generation quality, latency, parameter sensitivity, and robustness to deletion and synonym-substitution attacks.
+  \item We design and test a structured residual watermark for tabular time-series data, embedding a 12-bit payload into small numerical residuals while preserving distributional statistics.
+\end{enumerate}
+Together, these experiments connect the standard LLM watermarking literature with a structured-data setting that is relevant for future multimodal and data-generating foundation models.
 
 \section{Problem Definition}
 
@@ -107,8 +133,6 @@ We compare baseline generation, KGW, and unbiased watermarking across detection,
 The structured-data experiment uses 48 entities and 150 time steps, for 7200 total rows.
 The payload is 12 bits.
 We evaluate distribution preservation with summary statistics, correlations, and a Kolmogorov-Smirnov test, then test robustness under additive noise, random row dropping, smoothing, and quantization.
-
-\section{Evaluation}
 
 \subsection{Text Watermark Reproduction}
 
@@ -236,16 +260,26 @@ The unbiased method reduced quality loss, with mean PPL close to baseline, but r
 The proposed structured residual watermark embedded a 12-bit payload into time-series data with minimal statistical distortion and perfect recovery under several common attacks.
 Overall, the project demonstrates both the promise and the tradeoffs of watermarking across text and structured-data generation.
 
-\begin{thebibliography}{9}
+\begin{thebibliography}{99}
 \bibitem{kirchenbauer2023}
 J. Kirchenbauer, J. Geiping, Y. Wen, J. Katz, I. Miers, and T. Goldstein.
 \newblock A Watermark for Large Language Models.
 \newblock In \emph{ICML}, 2023.
 
-\bibitem{thickstun2023}
-J. Thickstun.
+\bibitem{kirchenbauer_reliability2023}
+J. Kirchenbauer, J. Geiping, Y. Wen, M. Shu, K. Saifullah, K. Kong, K. Fernando, A. Saha, M. Goldblum, and T. Goldstein.
+\newblock On the Reliability of Watermarks for Large Language Models.
+\newblock \emph{arXiv preprint arXiv:2306.04634}, 2023.
+
+\bibitem{kuditipudi2023}
+R. Kuditipudi, J. Thickstun, T. Hashimoto, and P. Liang.
 \newblock Robust Distortion-free Watermarks for Language Models.
-\newblock \emph{TMLR}, 2023.
+\newblock \emph{Transactions on Machine Learning Research}, 2024.
+
+\bibitem{sadasivan2023}
+V. Sadasivan, A. Kumar, S. Balasubramanian, W. Wang, and S. Feizi.
+\newblock Can AI-Generated Text be Reliably Detected?
+\newblock \emph{arXiv preprint arXiv:2303.11156}, 2023.
 
 \bibitem{markllm2024}
 X. Pan et al.
