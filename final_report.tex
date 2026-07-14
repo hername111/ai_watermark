@@ -20,9 +20,8 @@
   urlcolor=blue
 }
 
-\definecolor{headingblue}{HTML}{2E74B5}
-\titleformat{\section}{\large\bfseries\color{headingblue}}{\thesection.}{0.5em}{}
-\titleformat{\subsection}{\normalsize\bfseries\color{headingblue}}{\thesubsection}{0.5em}{}
+\titleformat{\section}{\large\bfseries\color{black}}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{black}}{\thesubsection}{0.5em}{}
 \captionsetup{font=small,labelfont=bf}
 \setstretch{1.08}
 \setlength{\parskip}{0.35em}
@@ -89,7 +88,7 @@ Together, these experiments connect the standard LLM watermarking literature wit
 
 \section{Problem Definition}
 
-For text generation, the watermarking problem is defined over a language model distribution $p(x_t \mid x_{<t})$.
+For text generation, the watermarking problem is defined over a language model distribution $p(x_t \mid x_{<t})$, following the standard decoding-time watermarking formulation used in prior LLM watermarking work \cite{kirchenbauer2023,kuditipudi2023}.
 During decoding, a secret key partitions the vocabulary into green and red tokens based on context.
 A watermarking algorithm modifies the decoding distribution so that green tokens are sampled more often than expected under an unwatermarked model.
 Given a generated sequence, the detector computes a z-score measuring green-token enrichment relative to a binomial null distribution.
@@ -103,7 +102,7 @@ The main constraints are imperceptibility, payload capacity, and robustness.
 
 \subsection{KGW Green-List Text Watermark}
 
-KGW constructs a pseudorandom green list using a stable hash of recent context tokens and a secret key.
+KGW constructs a pseudorandom green list using a stable hash of recent context tokens and a secret key \cite{kirchenbauer2023}.
 During generation, green-list logits receive an additive bias $\delta$.
 The detector repeats the same green-list construction and computes
 \[
@@ -113,7 +112,7 @@ where $G$ is the number of generated green tokens, $n$ is the number of generate
 
 \subsection{Unbiased Probability-Reweighting Watermark}
 
-The unbiased method uses the same secret-keyed green-list partition but modifies token probabilities by multiplying green-token probabilities by $\alpha$ and renormalizing.
+The unbiased method uses the same secret-keyed green-list partition but modifies token probabilities by multiplying green-token probabilities by $\alpha$ and renormalizing, following the motivation of distribution-preserving watermarking \cite{kuditipudi2023}.
 This generally produces a weaker detection signal than direct logit bias, but it is designed to reduce quality degradation because the transformation operates directly on the probability mass.
 
 \subsection{Structured Residual Watermark}
@@ -126,15 +125,18 @@ The perturbation magnitude is only about 3\% of the data standard deviation, so 
 
 \section{Experiments}
 
-The text experiments use Qwen2.5-0.5B-Instruct with 100 Chinese prompts, maximum generation length of 80 new tokens, temperature 0.9, and top-p 0.95.
+The text experiments use Qwen2.5-0.5B-Instruct \cite{qwen25} with 100 Chinese prompts, maximum generation length of 80 new tokens, temperature 0.9, and top-p 0.95.
 Human-written Chinese texts are used as negative samples for false-positive evaluation.
-We compare baseline generation, KGW, and unbiased watermarking across detection, perplexity, latency, ROC/AUC, and attack robustness.
+We compare baseline generation, KGW, and unbiased watermarking across detection, perplexity, latency, ROC/AUC, and attack robustness, following common evaluation dimensions in watermarking benchmarks and toolkits \cite{markllm2024,tutorial2024}.
 
 The structured-data experiment uses 48 entities and 150 time steps, for 7200 total rows.
 The payload is 12 bits.
 We evaluate distribution preservation with summary statistics, correlations, and a Kolmogorov-Smirnov test, then test robustness under additive noise, random row dropping, smoothing, and quantization.
 
 \subsection{Text Watermark Reproduction}
+
+Table 1 reports the core reproduction results for the three generation settings.
+It compares the detection signal, text quality, runtime, and output length, so it is the main evidence for the basic tradeoff between watermark strength and generation quality.
 
 \begin{table}[H]
 \centering
@@ -150,10 +152,13 @@ Unbiased & 100 & 2.75 & 9.91 & 1.77 & 80 \\
 \end{tabular}
 \end{table}
 
-KGW produces the strongest detection signal: its mean z-score is 5.22, clearly above the common threshold $z=2$.
+KGW produces the strongest detection signal: its mean z-score is 5.22, clearly above the common threshold $z=2$ used in prior green-list watermark detectors \cite{kirchenbauer2023}.
 The unbiased method also produces a detectable signal with mean $z=2.75$, but its signal is weaker.
 The quality tradeoff is visible in perplexity: KGW increases mean PPL from 9.24 to 12.18, while the unbiased method stays closer to baseline at 9.91.
 Runtime overhead is small for both methods, with per-sample latency remaining near baseline.
+
+Figure 1 visualizes the same reproduction experiment from multiple angles.
+The z-score panel makes the detection gap between baseline, KGW, and unbiased watermarking easy to see, while the quality and runtime panels show that stronger detectability does not come with a large latency cost.
 
 \begin{figure}[H]
 \centering
@@ -162,6 +167,9 @@ Runtime overhead is small for both methods, with per-sample latency remaining ne
 \end{figure}
 
 \subsection{Detection Metrics and Parameter Sensitivity}
+
+Table 2 summarizes representative classification metrics under different watermark strengths and detection thresholds.
+The table is used to compare not only accuracy, but also precision, recall, F1, and AUC, which together describe whether a method is both sensitive to watermarked text and conservative on non-watermarked text.
 
 \begin{table}[H]
 \centering
@@ -185,6 +193,9 @@ KGW reaches near-perfect or perfect AUC when $\delta$ is at least 1.5, and perfe
 The unbiased method requires a larger $\alpha$ to reach comparable recall.
 At $z=2$, false positives on human texts remain low; stronger thresholds reduce false positives further but can reduce recall, especially for weaker watermark parameters.
 
+Figure 2 aggregates the systematic evaluation into charts for detection, ROC behavior, quality, runtime, and robustness.
+It complements Table 2 by showing trends across more configurations, making the parameter-sensitivity pattern clearer than a small table alone.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\linewidth]{outputs/assignment2_full_charts.png}
@@ -193,12 +204,15 @@ At $z=2$, false positives on human texts remain low; stronger thresholds reduce 
 
 \subsection{Robustness}
 
-Deletion and synonym-substitution attacks reduce z-scores because they remove or alter the token-level evidence used by the detector.
+Deletion and synonym-substitution attacks reduce z-scores because they remove or alter the token-level evidence used by the detector, which is consistent with prior reliability analyses of watermarked and post-hoc detected AI text \cite{kirchenbauer_reliability2023,sadasivan2023}.
 KGW is more robust overall because its additive logit bias creates a stronger initial signal.
 In the stored attack traces, KGW with $\delta=2.5$ remains strongly detectable under moderate synonym replacement and light deletion, while weaker KGW and unbiased configurations lose evidence faster.
 This confirms a practical tradeoff: stronger watermarks survive attacks better but can increase distributional distortion.
 
 \subsection{Structured Time-Series Watermark}
+
+Table 3 evaluates whether the structured residual watermark changes the visible statistical properties of the generated time series.
+The small mean and standard-deviation shifts, very high correlations, and high KS p-value indicate that the watermark is difficult to notice from ordinary distributional summaries.
 
 \begin{table}[H]
 \centering
@@ -220,6 +234,9 @@ The structured residual watermark preserves data utility well.
 Mean and quantile shifts are below one percent, Pearson and Spearman correlations remain above 0.9995, and the KS p-value remains high at 0.9874.
 All 12 payload bits are recovered in the clean setting, with very large absolute bit-level z-scores between 48.88 and 55.06.
 
+Table 4 reports robustness results for the structured residual watermark under four common transformations.
+The table shows that aggregation over many records makes the payload robust to additive noise, row deletion, and quantization, while smoothing is the main weakness because it directly suppresses local residual signs.
+
 \begin{table}[H]
 \centering
 \caption{Structured watermark robustness.}
@@ -235,6 +252,9 @@ Smoothing & Window 5-15 & 0.750 & 5.04-7.94 & Main weakness: local averaging rem
 \end{tabular}
 \end{table}
 
+Figure 3 gives a visual summary of the structured-data experiment.
+It links the bit-detection results, quality-preservation metrics, and attack outcomes, making it clear that the proposed residual watermark has strong clean detection and broad robustness but degrades under smoothing.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\linewidth]{outputs/assignment3_full_charts.png}
@@ -243,14 +263,14 @@ Smoothing & Window 5-15 & 0.750 & 5.04-7.94 & Main weakness: local averaging rem
 
 \section{Discussion}
 
-The experiments show that no single watermark setting is optimal for every objective.
+The experiments show that no single watermark setting is optimal for every objective, matching the detection-quality-robustness tradeoff emphasized in previous watermarking studies \cite{kirchenbauer2023,kuditipudi2023,markllm2024}.
 KGW is preferable when the priority is confident detection and attack robustness.
 The unbiased method is preferable when preserving generation quality is more important and moderate detection confidence is acceptable.
 For structured data, residual aggregation can produce extremely strong bit-level evidence while keeping visible statistical changes small, but smoothing attacks are a clear limitation because they specifically suppress high-frequency residual patterns.
 
 A limitation of this project is scale.
 The text experiments use a small open-source model and 100 prompts, so the results should be viewed as a controlled reproduction rather than a full deployment study.
-Future work should evaluate larger models, longer generations, paraphrase attacks, multilingual prompts, and adaptive attackers who know the detector family but not the secret key.
+Future work should evaluate larger models, longer generations, paraphrase attacks, multilingual prompts, and adaptive attackers who know the detector family but not the secret key, because these factors are repeatedly identified as key deployment risks for AI-text watermarking and detection \cite{kirchenbauer_reliability2023,sadasivan2023}.
 
 \section{Conclusion}
 
