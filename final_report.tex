@@ -42,32 +42,49 @@ Final Group Project Report\\[0.5em]
 \maketitle
 
 \begin{abstract}
-This project studies watermarking as a practical mechanism for tracing machine-generated content.
+This project studies watermarking as a mechanism for tracing generated content.
 We reproduce two representative LLM text watermarking algorithms, KGW green-list watermarking and an unbiased probability-reweighting watermark, on Qwen2.5-0.5B-Instruct.
 We evaluate detectability, generation quality, runtime overhead, false positives on human text, parameter sensitivity, and robustness under deletion and synonym-substitution attacks.
-We further design a structured residual watermark for tabular and time-series foundation-model outputs, embedding a 12-bit payload into small numerical residuals while preserving the marginal distribution and time-series structure.
+We further design a structured residual watermark for tabular and time-series outputs, embedding a 12-bit payload into small numerical residuals while preserving distributional structure.
 Experiments show that KGW provides the strongest detection signal and robustness, while the unbiased method preserves text quality more closely.
 The structured residual watermark achieves perfect bit recovery under additive noise, row deletion, and quantization, but is more vulnerable to smoothing.
 \end{abstract}
 
 \section{Introduction}
 
-Large language models can generate fluent text at low cost, which creates both useful applications and attribution risks.
-Watermarking addresses this problem by inserting a hidden statistical signal during generation and detecting the signal later without changing the visible task interface.
-A good watermark should be detectable, hard to remove, computationally lightweight, and minimally harmful to output quality.
+Large language models generate fluent text at low cost.
+That creates both useful applications and attribution risks.
+Watermarking adds a hidden signal during generation and lets a detector recover it later without changing the visible task interface.
+A good watermark should be detectable, hard to remove, lightweight, and minimally harmful to output quality.
+In practice, these requirements conflict with each other.
+Stronger watermark signals are usually easier to detect and more robust to attacks, but they can also distort the model distribution and reduce generation quality.
+Weaker or more distribution-preserving methods often better protect fluency, but the detector may become less reliable, especially after rewriting or other post-processing.
+This tradeoff is central to whether watermarking can be used in real deployments rather than only in controlled demonstrations.
+
+Another practical issue is that watermarking performance depends heavily on the evaluation setup.
+Reported results can vary with model size, decoding temperature, prompt type, detector threshold, and attack model.
+A comparison that only checks one metric is not enough.
+For that reason, we evaluate both detection and utility.
+We also include runtime and robustness measurements to make the comparison operationally meaningful.
 
 This project studies watermarking in two settings.
 First, we reproduce and evaluate two representative LLM text watermarking methods, KGW green-list watermarking and an unbiased probability-reweighting watermark, on Qwen2.5-0.5B-Instruct.
 Second, we extend the watermarking idea to structured tabular and time-series outputs by embedding payload bits into small residual perturbations.
-This second setting is important because foundation models increasingly generate forecasts, tables, trajectories, and other numerical records, not only natural-language text.
+This setting matters because foundation models increasingly generate forecasts, tables, trajectories, and other numerical records, not only natural-language text.
+Compared with text watermarking, structured-data watermarking faces a different engineering problem.
+Small numeric perturbations can be weakened by averaging, rounding, or smoothing, so the payload must survive downstream processing while remaining statistically quiet.
+The design tradeoff is less about token selection and more about balancing payload capacity, robustness, and utility preservation across heterogeneous output types.
 
 This paper makes three contributions:
 \begin{itemize}[label=\textbf{\textbullet}]
   \item We reproduce KGW and an unbiased probability-reweighting watermark on Qwen2.5-0.5B-Instruct, using a controlled Chinese prompt set and human-written negative samples.
-  \item We evaluate the two text watermarks across detection accuracy, z-score behavior, ROC/AUC, false positives, generation quality, latency, parameter sensitivity, and robustness to deletion and synonym-substitution attacks.
+  \item We evaluate the two text watermarks across detection, quality, latency, and robustness.
   \item We design and test a structured residual watermark for tabular time-series data, embedding a 12-bit payload into small numerical residuals while preserving distributional statistics.
 \end{itemize}
-Together, these experiments connect the standard LLM watermarking literature with a structured-data setting that is relevant for future multimodal and data-generating foundation models.
+Together, these experiments connect LLM watermarking with structured-data watermarking.
+The structured-data setting is relevant for future multimodal and data-generating models.
+They also show that watermarking is not a single technique but a family of design choices whose behavior depends on the output domain and the downstream threat model.
+The rest of the paper is organized as follows: Section 2 reviews related work, Section 3 presents the watermarking framework, Section 4 reports the experimental setup and results, and Section 5 concludes.
 
 \section{Related Work}
 
@@ -76,7 +93,7 @@ These detectors are attractive because they can be applied after a model has alr
 Watermarking is different: it changes the generation process itself so that the generated sample carries a secret-keyed signal.
 This makes watermarking especially useful for providers who control decoding, because the detector can later test for a known statistical pattern without needing to train a separate classifier.
 
-The most influential LLM watermarking algorithm is the KGW green-list method of Kirchenbauer et al. \cite{kirchenbauer2023}.
+The KGW green-list method of Kirchenbauer et al. \cite{kirchenbauer2023} is the most widely used baseline.
 At each decoding step, a secret pseudorandom function partitions the vocabulary into green and red tokens, then adds a logit bias to green tokens.
 The detector recomputes the same partition and uses a z-test to decide whether green tokens appear more often than expected.
 KGW is simple, efficient, and usually produces a strong detection signal, but because it shifts the model distribution, strong watermark settings can affect text quality.
@@ -89,7 +106,7 @@ This family is conceptually related to unbiased probability-reweighting methods:
 Such methods usually improve imperceptibility, but the detection signal can be weaker and more sensitive to output entropy.
 
 Recent toolkits and surveys organize these algorithms into a broader engineering space.
-MarkLLM provides a unified implementation and evaluation framework for text watermarking methods \cite{markllm2024}, while the ACL watermarking tutorial summarizes design choices such as green-list construction, secret keys, detection thresholds, quality metrics, and robustness evaluation \cite{tutorial2024}.
+MarkLLM provides a unified implementation and evaluation framework for text watermarking methods \cite{markllm2024}, while a recent survey summarizes design choices such as green-list construction, secret keys, detection thresholds, quality metrics, and robustness evaluation \cite{survey2024}.
 Across this literature, the central tradeoff is consistent: stronger embedding improves detection and robustness, while weaker or distribution-preserving embedding better protects output quality.
 Most work, however, focuses on natural-language token sequences.
 There is less attention to watermarking structured outputs such as tables, time-series forecasts, and numerical records, even though foundation models are increasingly used to generate this type of data.
@@ -131,17 +148,17 @@ Bit value 1 and bit value 0 correspond to opposite signed residual shifts.
 Detection aggregates residual signs over all records assigned to each bit and computes a bit-level z-score.
 The perturbation magnitude is only about 3\% of the data standard deviation, so the watermark remains small relative to natural variation.
 
+\section{Experiments}
+
 \subsection{Training and Testing Setup}
 
 The text experiments use Qwen2.5-0.5B-Instruct \cite{qwen25} with 100 Chinese prompts, maximum generation length of 80 new tokens, temperature 0.9, and top-p 0.95.
 Human-written Chinese texts are used as negative samples for false-positive evaluation.
-We compare baseline generation, KGW, and unbiased watermarking across detection, perplexity, latency, ROC/AUC, and attack robustness, following common evaluation dimensions in watermarking benchmarks and toolkits \cite{markllm2024,tutorial2024}.
+We compare baseline generation, KGW, and unbiased watermarking across detection, perplexity, latency, ROC/AUC, and attack robustness, following common evaluation dimensions in watermarking benchmarks and toolkits \cite{markllm2024,survey2024}.
 
 The structured-data experiment uses 48 entities and 150 time steps, for 7200 total rows.
 The payload is 12 bits.
 We evaluate distribution preservation with summary statistics, correlations, and a Kolmogorov-Smirnov test, then test robustness under additive noise, random row dropping, smoothing, and quantization.
-
-\section{Results \& Experiments}
 
 \subsection{Text Watermark Reproduction}
 
@@ -178,8 +195,8 @@ The z-score panel makes the detection gap between baseline, KGW, and unbiased wa
 
 \subsection{Detection Metrics and Parameter Sensitivity}
 
-Table 2 summarizes representative classification metrics under different watermark strengths and detection thresholds.
-The table is used to compare not only accuracy, but also precision, recall, F1, and AUC, which together describe whether a method is both sensitive to watermarked text and conservative on non-watermarked text.
+Table 2 summarizes representative detection results under different watermark strengths and thresholds.
+It compares accuracy, precision, recall, F1, and AUC, which together describe whether a method is both sensitive to watermarked text and conservative on non-watermarked text.
 
 \begin{table}[H]
 \centering
@@ -250,14 +267,14 @@ The table shows that aggregation over many records makes the payload robust to a
 \begin{table}[H]
 \centering
 \caption{Structured watermark robustness.}
-\begin{tabular}{p{0.18\linewidth}p{0.18\linewidth}p{0.13\linewidth}p{0.13\linewidth}p{0.25\linewidth}}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.16\linewidth}>{\raggedright\arraybackslash}p{0.14\linewidth}>{\raggedright\arraybackslash}p{0.12\linewidth}>{\raggedright\arraybackslash}p{0.11\linewidth}>{\raggedright\arraybackslash}p{0.24\linewidth}}
 \toprule
-Attack & Max tested strength & Bit accuracy & Mean $|z|$ & Main observation \\
+Attack & Max strength & Bit accuracy & Mean $|z|$ & Observation \\
 \midrule
-Additive noise & 0.18 & 1.000 & 4.39 & Payload still fully recovered. \\
-Row drop & 0.60 & 1.000 & 33.23 & Aggregation over many rows is highly robust. \\
+Additive noise & 0.18 & 1.000 & 4.39 & Payload recovered. \\
+Row drop & 0.60 & 1.000 & 33.23 & Aggregation over many rows is robust. \\
 Quantization & Integer rounding & 1.000 & 9.60 & Signal survives coarse rounding. \\
-Smoothing & Window 5-15 & 0.750 & 5.04-7.94 & Main weakness: local averaging removes residual signs. \\
+Smoothing & Window 5-15 & 0.750 & 5.04-7.94 & Main weakness: averaging removes residual signs. \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -289,7 +306,7 @@ Overall, the project demonstrates both the promise and the tradeoffs of watermar
 \bibitem{kirchenbauer2023}
 J. Kirchenbauer, J. Geiping, Y. Wen, J. Katz, I. Miers, and T. Goldstein.
 \newblock A Watermark for Large Language Models.
-\newblock In \emph{ICML}, 2023.
+\newblock \emph{arXiv preprint arXiv:2301.10226}, 2023.
 
 \bibitem{kirchenbauer_reliability2023}
 J. Kirchenbauer, J. Geiping, Y. Wen, M. Shu, K. Saifullah, K. Kong, K. Fernando, A. Saha, M. Goldblum, and T. Goldstein.
@@ -299,7 +316,7 @@ J. Kirchenbauer, J. Geiping, Y. Wen, M. Shu, K. Saifullah, K. Kong, K. Fernando,
 \bibitem{kuditipudi2023}
 R. Kuditipudi, J. Thickstun, T. Hashimoto, and P. Liang.
 \newblock Robust Distortion-free Watermarks for Language Models.
-\newblock \emph{Transactions on Machine Learning Research}, 2024.
+\newblock \emph{arXiv preprint arXiv:2307.15593}, 2023.
 
 \bibitem{sadasivan2023}
 V. Sadasivan, A. Kumar, S. Balasubramanian, W. Wang, and S. Feizi.
@@ -307,18 +324,19 @@ V. Sadasivan, A. Kumar, S. Balasubramanian, W. Wang, and S. Feizi.
 \newblock \emph{arXiv preprint arXiv:2303.11156}, 2023.
 
 \bibitem{markllm2024}
-X. Pan et al.
+L. Pan, A. Liu, Z. He, Z. Gao, X. Zhao, Y. Lu, B. Zhou, S. Liu, X. Hu, L. Wen, I. King, and P. S. Yu.
 \newblock MarkLLM: An Open-Source Toolkit for LLM Watermarking.
-\newblock In \emph{EMNLP}, 2024.
+\newblock \emph{arXiv preprint arXiv:2405.10051}, 2024.
 
-\bibitem{tutorial2024}
-Li Lab.
-\newblock LLM Watermarking Tutorial.
-\newblock ACL Tutorial, 2024.
+\bibitem{survey2024}
+Aiwei Liu, Leyi Pan, Yijian Lu, Jingjing Li, Xuming Hu, Xi Zhang, Lijie Wen, Irwin King, Hui Xiong, and Philip S. Yu.
+\newblock A Survey of Text Watermarking in the Era of Large Language Models.
+\newblock \emph{arXiv preprint arXiv:2312.07913}, 2023.
 
 \bibitem{qwen25}
-Qwen Team.
-\newblock Qwen2.5-0.5B-Instruct model documentation.
+Qwen.
+\newblock Qwen2.5 Technical Report.
+\newblock \emph{arXiv preprint arXiv:2412.15115}, 2024.
 \end{thebibliography}
 
 \end{document}
